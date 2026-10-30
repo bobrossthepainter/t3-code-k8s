@@ -2,6 +2,11 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    # CodeQL init/analyze/upload must use the same action release.
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action*"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
