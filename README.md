@@ -15,16 +15,17 @@ libraries are included; no separate Node/npm installation is needed.
 
 ## Published artifacts
 
-Replace `OWNER` with this repository's GitHub owner (lowercase). Workflows derive the actual
-registry path automatically; no registry secret or PAT is needed.
+Images and charts are published publicly under [bobrossthepainter](https://github.com/bobrossthepainter)
+on GHCR. Pulling them requires no registry login, PAT, or Kubernetes image pull secret.
+Publishing workflows derive the registry path automatically and use `GITHUB_TOKEN`.
 
 | Artifact | Location |
 | --- | --- |
-| Stable image | `ghcr.io/OWNER/t3-code-k8s:stable` (`latest` is an alias) |
-| Nightly image | `ghcr.io/OWNER/t3-code-k8s:nightly` |
+| Stable image | `ghcr.io/bobrossthepainter/t3-code-k8s:stable` (`latest` is an alias) |
+| Nightly image | `ghcr.io/bobrossthepainter/t3-code-k8s:nightly` |
 | Upstream-version image | `:stable-0.1.5`, `:nightly-0.1.6-nightly.20261030.3940`, etc. |
 | Unique build | `:build-CHANNEL-RUN_ID-RUN_ATTEMPT` |
-| Helm chart | `oci://ghcr.io/OWNER/t3-code-k8s/charts/t3-code` |
+| Helm chart | `oci://ghcr.io/bobrossthepainter/t3-code-k8s/charts/t3-code` |
 | Release downloads | GitHub Releases: image digest JSON, or chart `.tgz` + `SHA256SUMS` |
 
 Images support **linux/amd64** and **linux/arm64**. Channel and upstream-version aliases
@@ -38,11 +39,11 @@ release does not needlessly republish an unchanged chart.
 docker volume create t3-data
 # Named Docker volumes need initialization; Kubernetes uses fsGroup instead.
 docker run --rm --user 0 --entrypoint chown -v t3-data:/data \
-  ghcr.io/OWNER/t3-code-k8s:stable 10001:10001 /data
+  ghcr.io/bobrossthepainter/t3-code-k8s:stable 10001:10001 /data
 
 docker run -d --name t3 --read-only --cap-drop ALL \
   --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=256m \
-  -v t3-data:/data -p 127.0.0.1:3773:3773 ghcr.io/OWNER/t3-code-k8s:stable
+  -v t3-data:/data -p 127.0.0.1:3773:3773 ghcr.io/bobrossthepainter/t3-code-k8s:stable
 
 docker exec t3 t3 auth pairing create --ttl 5m --base-url http://127.0.0.1:3773
 ```
@@ -58,9 +59,9 @@ Requires Kubernetes 1.26+, Helm 3.17+ (also tested with Helm 4), a default Stora
 or an existing PVC, and access to the published image/chart.
 
 ```sh
-helm upgrade --install t3 oci://ghcr.io/OWNER/t3-code-k8s/charts/t3-code \
+helm upgrade --install t3 oci://ghcr.io/bobrossthepainter/t3-code-k8s/charts/t3-code \
   --version 0.1.0 --namespace t3-code --create-namespace \
-  --set image.repository=ghcr.io/OWNER/t3-code-k8s
+  --set image.repository=ghcr.io/bobrossthepainter/t3-code-k8s
 
 kubectl -n t3-code port-forward svc/t3-t3-code 3773:3773
 kubectl -n t3-code exec deploy/t3-t3-code -- \
@@ -79,9 +80,9 @@ The example uses ingress-nginx annotations; other controllers need their own set
 `app.t3.codes` requires an HTTPS backend; desktop/direct local pairing can use LAN HTTP.
 
 ```sh
-helm upgrade --install t3 oci://ghcr.io/OWNER/t3-code-k8s/charts/t3-code \
+helm upgrade --install t3 oci://ghcr.io/bobrossthepainter/t3-code-k8s/charts/t3-code \
   --version 0.1.0 -n t3-code --create-namespace \
-  --set image.repository=ghcr.io/OWNER/t3-code-k8s -f examples/ingress.yaml
+  --set image.repository=ghcr.io/bobrossthepainter/t3-code-k8s -f examples/ingress.yaml
 kubectl -n t3-code exec deploy/t3-t3-code -- \
   t3 auth pairing create --ttl 5m --base-url https://t3.example.com
 ```
@@ -99,9 +100,9 @@ without checking for tokens. A reverse proxy must not strip WebSocket/auth heade
 3. Apply [examples/tailscale.yaml](examples/tailscale.yaml) instead of public ingress:
 
 ```sh
-helm upgrade --install t3 oci://ghcr.io/OWNER/t3-code-k8s/charts/t3-code \
+helm upgrade --install t3 oci://ghcr.io/bobrossthepainter/t3-code-k8s/charts/t3-code \
   --version 0.1.0 -n t3-code --create-namespace \
-  --set image.repository=ghcr.io/OWNER/t3-code-k8s -f examples/tailscale.yaml
+  --set image.repository=ghcr.io/bobrossthepainter/t3-code-k8s -f examples/tailscale.yaml
 kubectl -n t3-code get ingress t3-t3-code-tailscale
 # Use the assigned https://t3-code.<tailnet>.ts.net URL when creating a pairing link.
 ```
