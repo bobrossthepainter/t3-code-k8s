@@ -1,0 +1,5 @@
+# Install the Tailscale Kubernetes operator first. No auth key belongs in this chart.
+tailscale:
+  enabled: true
+  hostname: t3-code
+  # tags: [tag:t3-code] # Must be permitted by your operator's OAuth client and ACLs.

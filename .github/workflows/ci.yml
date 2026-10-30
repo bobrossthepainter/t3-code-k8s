@@ -1,0 +1,61 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.17.3
+      - name: Unit tests and Helm rendering
+        run: |
+          python3 -m pip install -r requirements-dev.txt
+          python3 -m unittest discover -s tests -v
+      - name: Install pinned validation tools
+        run: |
+          curl -fsSL --retry 3 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o /tmp/actionlint.tgz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tgz' | sha256sum -c -
+          curl -fsSL --retry 3 https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz -o /tmp/kubeconform.tgz
+          echo '9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883  /tmp/kubeconform.tgz' | sha256sum -c -
+          mkdir -p /tmp/tools
+          tar xzf /tmp/actionlint.tgz -C /tmp/tools actionlint
+          tar xzf /tmp/kubeconform.tgz -C /tmp/tools kubeconform
+          echo /tmp/tools >> "$GITHUB_PATH"
+      - name: Workflow, shell and Kubernetes API validation
+        run: |
+          actionlint
+          shellcheck scripts/*.sh
+          for values in charts/t3-code/values.yaml examples/*.yaml; do
+            helm template test charts/t3-code --set image.repository=ghcr.io/example/t3-code-k8s -f "$values" \
+              | kubeconform -strict -summary -kubernetes-version 1.30.0
+          done
+  runtime:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Resolve stable upstream
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/upstream.py --channel stable
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          load: true
+          tags: t3-code-k8s:test
+          build-args: |
+            T3_VERSION=${{ steps.upstream.outputs.version }}
+            T3_SHA256_AMD64=${{ steps.upstream.outputs.sha256_amd64 }}
+            T3_SHA256_ARM64=${{ steps.upstream.outputs.sha256_arm64 }}
+      - run: bash scripts/smoke.sh t3-code-k8s:test

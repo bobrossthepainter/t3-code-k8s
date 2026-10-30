@@ -1,0 +1,88 @@
+name: Security scans
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '43 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  codeql:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: github/codeql-action/init@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          languages: python,actions
+          queries: security-extended
+      - uses: github/codeql-action/analyze@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+  repository:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_HELM_SET: image.repository=ghcr.io/example/t3-code-k8s
+        with:
+          version: v0.76.1
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          scan-ref: .
+          format: sarif
+          output: repository.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - if: always() && hashFiles('repository.sarif') != ''
+        uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          sarif_file: repository.sarif
+          category: repository
+  published-images:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, nightly]
+        arch: [amd64, arm64]
+    steps:
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Re-scan existing published image against current vulnerability database
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/${{ matrix.arch }}
+        with:
+          version: v0.76.1
+          image-ref: ${{ env.IMAGE }}:${{ matrix.channel }}
+          format: sarif
+          output: image.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+      - if: always() && hashFiles('image.sarif') != ''
+        uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          sarif_file: image.sarif
+          category: published-${{ matrix.channel }}-${{ matrix.arch }}
+  dependencies:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high

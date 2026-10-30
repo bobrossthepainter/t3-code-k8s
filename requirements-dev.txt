@@ -1,0 +1,2 @@
+# Test-only dependencies; runtime/release resolver uses Python's standard library.
+PyYAML==6.0.3

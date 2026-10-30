@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests"],
+  "enabledManagers": ["dockerfile"],
+  "packageRules": [{
+    "matchDatasources": ["docker"],
+    "matchPackageNames": ["ubuntu"],
+    "allowedVersions": "24.04",
+    "automerge": false
+  }]
+}

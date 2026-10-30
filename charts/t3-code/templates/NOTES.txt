@@ -1,0 +1,20 @@
+T3 Code is deployed as a single persistent server (not an agent execution image).
+
+Create a SHORT-LIVED pairing link, using the URL your client can reach:
+  kubectl exec -n {{ .Release.Namespace }} deploy/{{ include "t3.fullname" . }} -- \
+    t3 auth pairing create --ttl 5m --base-url https://YOUR_HOST
+
+Pairing links grant powerful access; do not share them or paste them into tickets.
+
+{{- if .Values.tailscale.enabled }}
+The Tailscale operator must already be installed with HTTPS enabled for your tailnet.
+Find its assigned URL:
+  kubectl get ingress -n {{ .Release.Namespace }} {{ include "t3.fullname" . }}-tailscale
+{{- else if not .Values.ingress.enabled }}
+For local-only access:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "t3.fullname" . }} 3773:{{ .Values.service.port }}
+Use http://127.0.0.1:3773 as the pairing base URL.
+{{- end }}
+
+Back up /data before upgrading; SQLite migrations may prevent image-only rollback.
+Helm uninstall deletes chart-created PVCs. Use persistence.existingClaim for independently managed storage.

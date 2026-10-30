@@ -1,0 +1,180 @@
+name: Image release implementation
+on:
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      version:
+        default: ''
+        type: string
+      force:
+        default: false
+        type: boolean
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.resolve.outputs.version }}
+      sha256_amd64: ${{ steps.resolve.outputs.sha256_amd64 }}
+      sha256_arm64: ${{ steps.resolve.outputs.sha256_arm64 }}
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check again after acquiring channel concurrency lock
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          args=(--channel "$CHANNEL" --check "$GITHUB_REPOSITORY")
+          if [[ -n "$VERSION" ]]; then args+=(--version "$VERSION"); fi
+          if [[ "$FORCE" == true ]]; then args+=(--force); fi
+          python3 scripts/upstream.py "${args[@]}"
+      - name: Resolve exact release and architecture checksums
+        if: steps.check.outputs.changed == 'true'
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ steps.check.outputs.version }}
+        run: python3 scripts/upstream.py --channel "$CHANNEL" --version "$VERSION"
+      - id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.changed == 'true'
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build immutable staging image (no channel alias yet)
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          pull: true
+          no-cache: true # Security rebuilds must refresh OS packages, not restore stale apt layers.
+          tags: ${{ needs.resolve.outputs.image }}:staging-${{ inputs.channel }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+          build-args: |
+            T3_VERSION=${{ needs.resolve.outputs.version }}
+            T3_SHA256_AMD64=${{ needs.resolve.outputs.sha256_amd64 }}
+            T3_SHA256_ARM64=${{ needs.resolve.outputs.sha256_arm64 }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}/releases/tag/${{ inputs.channel }}-v${{ needs.resolve.outputs.version }}
+          provenance: mode=max
+          sbom: true
+      - name: Native runtime smoke test
+        env:
+          IMAGE: ${{ needs.resolve.outputs.image }}@${{ steps.build.outputs.digest }}
+        run: bash scripts/smoke.sh "$IMAGE"
+      - name: Vulnerability scan and release gate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          image-ref: ${{ needs.resolve.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Upload scan, including when the release is blocked
+        if: always() && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          sarif_file: trivy.sarif
+          category: image-${{ inputs.channel }}-${{ matrix.arch }}
+
+  publish:
+    needs: [resolve, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      IMAGE: ${{ needs.resolve.outputs.image }}
+      CHANNEL: ${{ inputs.channel }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Assemble, sign, then promote the tested multi-architecture image
+        id: manifest
+        run: |
+          build_tag="$IMAGE:build-$CHANNEL-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          staging="$IMAGE:staging-$CHANNEL-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker buildx imagetools create -t "$build_tag" "$staging-amd64" "$staging-arm64"
+          digest=$(docker buildx imagetools inspect "$build_tag" --format '{{.Manifest.Digest}}')
+          cosign sign --yes "$IMAGE@$digest"
+          tags=(-t "$IMAGE:$CHANNEL" -t "$IMAGE:$CHANNEL-$VERSION")
+          if [[ "$CHANNEL" == stable ]]; then tags+=(-t "$IMAGE:latest"); fi
+          docker buildx imagetools create "${tags[@]}" "$IMAGE@$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          printf '### %s %s\n\n`%s@%s`\n' "$CHANNEL" "$VERSION" "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Record successful release (tracker retries failures, not successes)
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          tag="$CHANNEL-v$VERSION"
+          cat > release-notes.md <<EOF
+          Upstream: https://github.com/pingdotgg/t3code/releases/tag/v$VERSION
+
+          Image: \`$IMAGE@$DIGEST\`
+          Channel: \`$IMAGE:$CHANNEL\` (linux/amd64 and linux/arm64)
+          Build source: $GITHUB_SHA
+
+          Native smoke tests and fixable HIGH/CRITICAL vulnerability gates passed on both architectures.
+          Includes BuildKit SBOM/provenance and a keyless Cosign signature. See README for verification.
+          No provider CLIs are installed. Back up persistent data before upgrading.
+          EOF
+          python3 - <<'PY' > image.json
+          import json, os
+          print(json.dumps({k.lower(): os.environ[k] for k in ('IMAGE', 'DIGEST', 'CHANNEL', 'VERSION')}, indent=2))
+          PY
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file release-notes.md
+            gh release upload "$tag" image.json --clobber
+          else
+            args=(--title "T3 Code $CHANNEL $VERSION" --notes-file release-notes.md --target "$GITHUB_SHA")
+            if [[ "$CHANNEL" == nightly ]]; then args+=(--prerelease --latest=false); fi
+            gh release create "$tag" image.json "${args[@]}"
+          fi

@@ -1,0 +1,9 @@
+apiVersion: v2
+name: t3-code
+description: Headless T3 Code server with persistent state and optional Tailscale operator exposure
+type: application
+version: 0.1.0
+appVersion: "0.1.5"
+kubeVersion: ">=1.26.0-0"
+home: https://github.com/pingdotgg/t3code
+keywords: [t3-code, ai, server]

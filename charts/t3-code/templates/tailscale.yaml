@@ -1,0 +1,22 @@
+{{- if .Values.tailscale.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "t3.fullname" . }}-tailscale
+  labels:
+    {{- include "t3.labels" . | nindent 4 }}
+  {{- with .Values.tailscale.tags }}
+  annotations:
+    tailscale.com/tags: {{ join "," . | quote }}
+  {{- end }}
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - {{ .Values.tailscale.hostname | quote }}
+  defaultBackend:
+    service:
+      name: {{ include "t3.fullname" . }}
+      port:
+        number: {{ .Values.service.port }}
+{{- end }}

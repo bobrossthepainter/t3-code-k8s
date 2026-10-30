@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string"},
+        "tag": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      },
+      "additionalProperties": false
+    },
+    "server": {
+      "type": "object",
+      "properties": {
+        "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "extraArgs": {"type": "array", "items": {"type": "string"}},
+        "env": {"type": "array", "items": {"type": "object", "required": ["name"]}},
+        "envFrom": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": {"enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "annotations": {"$ref": "#/definitions/stringMap"}
+      },
+      "additionalProperties": false
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "existingClaim": {"type": "string"},
+        "size": {"type": "string", "minLength": 1},
+        "storageClass": {"type": ["string", "null"]},
+        "accessModes": {"type": "array", "minItems": 1, "items": {"enum": ["ReadWriteOnce", "ReadWriteOncePod", "ReadWriteMany"]}},
+        "annotations": {"$ref": "#/definitions/stringMap"}
+      },
+      "additionalProperties": false
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string"},
+        "annotations": {"$ref": "#/definitions/stringMap"},
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["host", "paths"],
+            "properties": {
+              "host": {"type": "string", "minLength": 1},
+              "paths": {
+                "type": "array", "minItems": 1,
+                "items": {
+                  "type": "object", "required": ["path", "pathType"],
+                  "properties": {
+                    "path": {"type": "string", "pattern": "^/"},
+                    "pathType": {"enum": ["Prefix", "Exact", "ImplementationSpecific"]}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tls": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "tailscale": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "hostname": {"type": "string", "maxLength": 63, "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"},
+        "tags": {"type": "array", "items": {"type": "string", "pattern": "^tag:[a-zA-Z0-9-]+$"}}
+      },
+      "additionalProperties": false
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingress": {"type": "array", "items": {"type": "object"}},
+        "egress": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "imagePullSecrets": {"type": "array"},
+    "terminationGracePeriodSeconds": {"type": "integer", "minimum": 1},
+    "podAnnotations": {"$ref": "#/definitions/stringMap"},
+    "podLabels": {"$ref": "#/definitions/stringMap"},
+    "extraVolumes": {"type": "array"},
+    "extraVolumeMounts": {"type": "array"},
+    "tolerations": {"type": "array"},
+    "nodeSelector": {"$ref": "#/definitions/stringMap"}
+  },
+  "definitions": {
+    "stringMap": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

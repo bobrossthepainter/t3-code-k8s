@@ -1,0 +1,51 @@
+name: Track upstream stable and nightly
+on:
+  schedule:
+    - cron: '19 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: upstream-tracker
+  cancel-in-progress: false
+jobs:
+  detect:
+    runs-on: ubuntu-24.04
+    outputs:
+      stable_changed: ${{ steps.stable.outputs.changed }}
+      stable_version: ${{ steps.stable.outputs.version }}
+      nightly_changed: ${{ steps.nightly.outputs.changed }}
+      nightly_version: ${{ steps.nightly.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/upstream.py --channel stable --check "$GITHUB_REPOSITORY"
+      - id: nightly
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/upstream.py --channel nightly --check "$GITHUB_REPOSITORY"
+  stable:
+    needs: detect
+    if: always() && needs.detect.outputs.stable_changed == 'true'
+    permissions:
+      contents: write
+      packages: write
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/release-stable.yml
+    with:
+      version: ${{ needs.detect.outputs.stable_version }}
+  nightly:
+    needs: detect
+    if: always() && needs.detect.outputs.nightly_changed == 'true'
+    permissions:
+      contents: write
+      packages: write
+      security-events: write
+      id-token: write
+    uses: ./.github/workflows/release-nightly.yml
+    with:
+      version: ${{ needs.detect.outputs.nightly_version }}

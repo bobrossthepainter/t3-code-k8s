@@ -1,0 +1,105 @@
+nameOverride: ""
+fullnameOverride: ""
+# One instance only: T3's SQLite state is not an HA/shared-server database.
+image:
+  # Required; e.g. ghcr.io/YOUR_ACCOUNT/t3-code-k8s
+  repository: ""
+  tag: stable
+  digest: "" # sha256:... overrides tag; recommended for production
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+service:
+  type: ClusterIP
+  port: 3773
+  annotations: {}
+server:
+  port: 3773
+  # Extra CLI flags after `serve`. Do not change host/port without adapting probes.
+  extraArgs: []
+  env: [] # Kubernetes EnvVar objects, including valueFrom.secretKeyRef
+  envFrom: [] # Existing Secret / ConfigMap references; never put credentials in values
+persistence:
+  enabled: true
+  existingClaim: ""
+  size: 5Gi
+  accessModes: [ReadWriteOnce]
+  storageClass: null # null: cluster default; "": disable dynamic provisioning
+  annotations: {}
+ingress:
+  enabled: false
+  className: ""
+  annotations: {} # Set your controller's WebSocket/idle timeout annotations
+  hosts:
+    - host: t3.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+# Requires a separately installed/authenticated Tailscale Kubernetes operator.
+# HTTPS Ingress, private to your tailnet; no in-pod VPN credentials or privileges.
+tailscale:
+  enabled: false
+  hostname: t3-code
+  tags: [] # Optional operator proxy tags; must be allowed by your tailnet policy
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+startupProbe:
+  httpGet:
+    path: /
+    port: http
+  periodSeconds: 5
+  failureThreshold: 60
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  periodSeconds: 10
+livenessProbe:
+  tcpSocket:
+    port: http
+  periodSeconds: 30
+  failureThreshold: 3
+terminationGracePeriodSeconds: 60
+tmp:
+  sizeLimit: 256Mi
+nodeSelector: {}
+tolerations: []
+affinity: {}
+extraVolumes: []
+extraVolumeMounts: []
+networkPolicy:
+  enabled: false
+  # When enabled, ingress is deny-by-default. Add controller/proxy namespace selectors.
+  ingress: []
+  # DNS only by default; add egress for T3 Connect, HTTPS, remote environments, etc.
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
