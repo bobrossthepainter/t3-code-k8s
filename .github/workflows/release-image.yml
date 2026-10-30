@@ -106,6 +106,7 @@ jobs:
           image-ref: ${{ needs.resolve.outputs.image }}@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy.sarif
+          limit-severities-for-sarif: true
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
@@ -149,6 +150,8 @@ jobs:
           if [[ "$CHANNEL" == stable ]]; then tags+=(-t "$IMAGE:latest"); fi
           docker buildx imagetools create "${tags[@]}" "$IMAGE@$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          # Markdown backticks are literal formatting.
+          # shellcheck disable=SC2016
           printf '### %s %s\n\n`%s@%s`\n' "$CHANNEL" "$VERSION" "$IMAGE" "$digest" >> "$GITHUB_STEP_SUMMARY"
       - name: Record successful release (tracker retries failures, not successes)
         env:

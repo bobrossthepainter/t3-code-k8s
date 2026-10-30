@@ -48,12 +48,16 @@ jobs:
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           cosign sign --yes "$REGISTRY_PATH/t3-code@$digest"
           (cd dist && sha256sum "t3-code-$VERSION.tgz" > SHA256SUMS)
+          # Markdown backticks are literal formatting.
+          # shellcheck disable=SC2016
           printf 'OCI chart: `%s/t3-code:%s`\nDigest: `%s`\n' "$REGISTRY_PATH" "$VERSION" "$digest" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish downloadable chart alongside OCI artifact
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="chart-v$VERSION"
+          # Markdown backticks are literal formatting.
+          # shellcheck disable=SC2016
           printf 'Install: `helm install t3 oci://%s/t3-code --version %s --set image.repository=ghcr.io/%s`\n' \
             "$REGISTRY_PATH" "$VERSION" "${GITHUB_REPOSITORY,,}" > notes.md
           if gh release view "$tag" >/dev/null 2>&1; then

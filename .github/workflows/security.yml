@@ -38,6 +38,7 @@ jobs:
           scan-ref: .
           format: sarif
           output: repository.sarif
+          limit-severities-for-sarif: true
           severity: HIGH,CRITICAL
           exit-code: '1'
       - if: always() && hashFiles('repository.sarif') != ''
@@ -68,6 +69,7 @@ jobs:
           image-ref: ${{ env.IMAGE }}:${{ matrix.channel }}
           format: sarif
           output: image.sarif
+          limit-severities-for-sarif: true
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: '1'
