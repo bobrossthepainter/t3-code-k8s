@@ -1,5 +1,35 @@
 # Maintaining and publishing
 
+## Automation pause
+
+Automatic upstream/dependency runs are temporarily paused:
+
+- `track-upstream.yml` is disabled in GitHub, and its hourly cron is removed.
+- `security.yml` has no daily cron; push/PR checks and manual dispatch remain enabled.
+- Dependabot's configuration is parked as `.github/dependabot.paused.yml`, so GitHub does
+  not schedule version updates. Automatic Dependabot security-fix PRs are disabled in
+  repository settings too; vulnerability alerts and secret protection remain enabled.
+- `renovate.json` sets `enabled: false`.
+- Manual stable/nightly/chart release workflows remain available. Existing dependency PRs
+  are left open for later review. This pause does not change deployed workloads or Flux.
+
+To run the tracker once without restoring schedules:
+
+```sh
+gh workflow enable track-upstream.yml
+gh workflow run track-upstream.yml
+# Optionally disable it again after that run:
+gh workflow disable track-upstream.yml
+```
+
+To restore automation deliberately, re-add the hourly `19 * * * *` tracker cron and daily
+`43 6 * * *` security cron, and enable the tracker. Rename `dependabot.paused.yml` back to
+`dependabot.yml`, remove Renovate's `enabled: false`, and re-enable automatic security-fix
+PRs if desired (`gh api --method PUT repos/bobrossthepainter/t3-code-k8s/automated-security-fixes`).
+Commit/push configuration changes. GitHub's generated Dependabot workflow cannot be
+manually disabled through the Actions API; removing its recognized config pauses its
+scheduled version-update triggers instead.
+
 ## First-time GitHub setup
 
 1. Authenticate the GitHub CLI on this host: `gh auth login` (do not paste a token in chat).
@@ -14,7 +44,8 @@
    Dependabot alerts/security updates, secret scanning and push protection where available.
    CodeQL is configured through the advanced workflow; do not also enable a duplicate default setup.
    Actions use the repository `GITHUB_TOKEN`; no long-lived registry credentials are required.
-4. Run `gh workflow run track-upstream.yml`. Stable/nightly releases build independently.
+4. If intentionally resuming updates, enable the tracker and run `gh workflow run track-upstream.yml`.
+   Stable/nightly releases build independently. See the automation pause above.
 5. After the first package pushes, **set both GHCR packages to public** in package settings
    (the image and `charts/t3-code`); public source repositories do not guarantee public package
    visibility. Check an unauthenticated pull, including the OCI chart. Subsequent pushes must
@@ -25,7 +56,7 @@
 7. Protect `main`, require review and CI, and restrict tag creation/Actions workflow changes.
    If Actions are disabled by org policy, explicitly allow the pinned actions used here.
 8. Optionally install/authorize the Renovate GitHub App. `renovate.json` alone doesn't run it.
-   Dependabot runs without that app, but does not update Docker base digests here.
+   When resumed, Dependabot runs without that app, but does not update Docker base digests here.
 
 GitHub may delay scheduled workflows or disable schedules in inactive public repositories.
 Monitor failed Actions runs; manual workflow dispatch remains available. These workflows do
@@ -59,7 +90,7 @@ automatically force an image release; use the explicit dispatch after CI passes.
 Staging tags are published before testing but **never deployed** by the chart. Both native
 architecture jobs must succeed before channel aliases move. A vulnerability gate failure leaves
 the previous alias intact. Investigate the SARIF finding; update the base/upstream dependency
-and retry. Do not broadly suppress CVEs to make a release green. Daily scans report all
+and retry. Do not broadly suppress CVEs to make a release green. Published-image scans report all
 HIGH/CRITICAL findings, including unfixed vulnerabilities; the release gate blocks only fixable
 HIGH/CRITICAL findings. Use a full local Trivy scan when reviewing lower-severity issues too.
 

@@ -1,3 +1,4 @@
+# Temporarily paused: restore this file's name to dependabot.yml to resume version updates.
 version: 2
 updates:
   - package-ecosystem: github-actions

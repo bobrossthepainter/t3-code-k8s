@@ -1,7 +1,6 @@
 name: Track upstream stable and nightly
 on:
-  schedule:
-    - cron: '19 * * * *'
+  # Automatic upstream polling is paused; manual dispatch remains defined.
   workflow_dispatch:
 permissions:
   contents: read

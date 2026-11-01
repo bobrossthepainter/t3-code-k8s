@@ -160,16 +160,21 @@ cluster-specific rules; see [examples/network-policy.yaml](examples/network-poli
 See [docs/maintaining.md](docs/maintaining.md) for initial GitHub setup, publishing,
 security rebuilds, signatures, test commands and release recovery.
 
-- Hourly upstream tracker selects published stable and nightly releases, never preview/alpha.
+**Automatic runs are currently paused:** the upstream tracker is disabled, cron schedules
+are removed, and Dependabot/Renovate updates are paused. Manual image/chart releases and
+push/PR checks remain available. See [resuming automation](docs/maintaining.md#automation-pause).
+
+- The upstream tracker selects published stable and nightly releases, never preview/alpha.
 - Separate stable/nightly workflows run only when their successful-release marker is absent.
   A failed channel doesn't prevent the other from building; failed releases retry next poll.
 - Downloads are exact-version archives verified against upstream `SHA256SUMS` for each arch.
 - Both native architecture jobs must pass runtime smoke tests and Trivy's **fixable
   HIGH/CRITICAL** gate before signed multiarch images receive public channel aliases.
 - BuildKit attaches SBOMs and provenance; Cosign keyless signatures bind artifacts to Actions.
-- Daily Trivy rescans published images for newly disclosed CVEs; CodeQL scans Python and Actions,
-  Trivy scans repository IaC/secrets/dependencies, and dependency review checks PR changes.
-- Dependabot updates Actions/Python; Renovate configuration tracks the pinned Ubuntu base digest.
+- Manual Trivy rescans can check published images for newly disclosed CVEs; CodeQL scans Python
+  and Actions on push/PR, Trivy scans repository IaC/secrets/dependencies, and dependency review
+  checks PR changes. The daily rescan schedule is paused.
+- When resumed, Dependabot updates Actions/Python and Renovate tracks the pinned Ubuntu base digest.
 
 Upstream's checksum file is fetched from the same GitHub release as its binaries: this detects
 corruption/mismatched assets, **not a compromised upstream publisher**. Container scanners also

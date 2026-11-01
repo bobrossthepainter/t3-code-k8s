@@ -3,8 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: '43 6 * * *'
+  # Scheduled rescans are paused; push/PR checks and manual dispatch remain.
   workflow_dispatch:
 permissions:
   contents: read
